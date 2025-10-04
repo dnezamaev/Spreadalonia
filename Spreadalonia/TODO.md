@@ -1,0 +1,4 @@
+﻿- Merged cells 
+- Background color for cells
+- Autofit column width and row height based on Excel
+- Formulas support based on EPPlus
