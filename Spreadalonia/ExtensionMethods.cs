@@ -3186,5 +3186,10 @@ namespace Spreadalonia
                 return x => values[(x - 1) % values.Count];
             }
         }
+
+        public static bool IsWithin(this int number, int from, int to)
+        {
+            return number >= from && number <= to;
+        }
     }
 }

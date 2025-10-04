@@ -1106,6 +1106,9 @@ namespace Spreadalonia
                     }
                     else
                     {
+                        var cell = new SpreadCell(Container, selectionStart.Item1, selectionStart.Item2);
+                        Container.RaiseCellClicked(cell);
+
                         this.Container.Selection = ImmutableList.Create(new SelectionRange(x + lastDrawnLeft, y + lastDrawnTop, x + lastDrawnLeft, y + lastDrawnTop));
                         selectionStart = (x + lastDrawnLeft, y + lastDrawnTop);
                         selectionMode = 0;
@@ -1138,6 +1141,9 @@ namespace Spreadalonia
                 else if (currentPoint.Properties.IsLeftButtonPressed && e.ClickCount == 2)
                 {
                     (int, int) cell = (x + lastDrawnLeft, y + lastDrawnTop);
+
+                    var spreadCell = new SpreadCell(Container, cell.Item1, cell.Item2);
+                    Container.RaiseCellDoubleClicked(spreadCell);
 
                     Color? clickedColor = null;
 
@@ -1196,12 +1202,16 @@ namespace Spreadalonia
                         {
                             this.Container.EditingCell = cell;
                             this.Container.IsEditing = true;
+
+                            if (Container.RaiseCellEditStarted().Cancel) return;
                         }
                     }
                     else
                     {
                         this.Container.EditingCell = cell;
                         this.Container.IsEditing = true;
+
+                        if (Container.RaiseCellEditStarted().Cancel) return;
                     }
                 }
 

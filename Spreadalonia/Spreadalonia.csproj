@@ -12,6 +12,7 @@
 	<PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
 	<PackageProjectUrl>https://github.com/arklumpus/Spreadalonia</PackageProjectUrl>
 	<PackageIcon>icon.png</PackageIcon>
+	<LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,7 +30,21 @@
 	<ItemGroup>
 		<PackageReference Include="Avalonia" Version="11.0.11" />
 		<PackageReference Include="Avalonia.Desktop" Version="11.0.11" />
+		<PackageReference Include="EPPlus" Version="6.0.3" />
 		<PackageReference Include="Fare" Version="2.2.1" />
 		<PackageReference Include="System.Collections.Immutable" Version="7.0.0" />
+	</ItemGroup>
+	
+	<ItemGroup>
+	  <AvaloniaXaml Update="Spreadbook.axaml">
+	    <SubType>Designer</SubType>
+	  </AvaloniaXaml>
+	</ItemGroup>
+	
+	<ItemGroup>
+	  <Compile Update="Spreadbook.axaml.cs">
+	    <SubType>Code</SubType>
+	    <DependentUpon>%(Filename)</DependentUpon>
+	  </Compile>
 	</ItemGroup>
 </Project>

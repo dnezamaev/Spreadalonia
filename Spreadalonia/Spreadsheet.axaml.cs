@@ -42,6 +42,62 @@ namespace Spreadalonia
     {
         internal static KeyModifiers ControlModifier = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX) ? KeyModifiers.Meta : KeyModifiers.Control;
 
+        #region Events.
+
+        public event EventHandler<MassiveSpreadCellsEditStartedEventArgs> MassiveCellsEditStarted;
+
+        internal MassiveSpreadCellsEditStartedEventArgs RaiseMassiveCellsEditStarted(
+            IEnumerable<SpreadCell> oldCellsContent, 
+            IEnumerable<SpreadCell> newCellsContent, 
+            IEnumerable<SelectionRange> range)
+        {
+            var eventArgs = 
+                new MassiveSpreadCellsEditStartedEventArgs(
+                    oldCellsContent.ToList(),
+                    newCellsContent.ToList(),
+                    range);
+
+            MassiveCellsEditStarted?.Invoke(this, eventArgs);
+            Container?.RaiseMassiveCellsEditStarted(eventArgs);
+            return eventArgs;
+        }
+
+        public event EventHandler<SpreadCellEditStartedEventArgs> CellEditStarted;
+
+        internal SpreadCellEditStartedEventArgs RaiseCellEditStarted()
+        {
+            var eventArgs = new SpreadCellEditStartedEventArgs(new SpreadCell(this, EditingCell));
+            CellEditStarted?.Invoke(this, eventArgs);
+            Container?.RaiseCellEditStarted(eventArgs);
+            return eventArgs;
+        }
+
+        public event EventHandler<SpreadCellEditEndedEventArgs> CellEditEnded;
+
+        internal SpreadCellEditEndedEventArgs RaiseCellEditEnded(string newText)
+        {
+            var eventArgs = new SpreadCellEditEndedEventArgs(new SpreadCell(this, EditingCell), newText);
+            CellEditEnded?.Invoke(this, eventArgs);
+            Container?.RaiseCellEditEnded(eventArgs);
+            return eventArgs;
+        }
+
+        public event EventHandler<SpreadCell> CellDoubleClicked;
+
+        internal void RaiseCellDoubleClicked(SpreadCell cell)
+        {
+            CellDoubleClicked?.Invoke(this, cell);
+            Container?.RaiseCellDoubleClicked(cell);
+        }
+
+        public event EventHandler<SpreadCell> CellClicked;
+
+        internal void RaiseCellClicked(SpreadCell cell)
+        {
+            CellClicked?.Invoke(this, cell);
+            Container?.RaiseCellClicked(cell);
+        }
+
         /// <summary>
         /// Raised when the size of a cell changes.
         /// </summary>
@@ -69,6 +125,45 @@ namespace Spreadalonia
             ColorDoubleTappedEventArgs e = new ColorDoubleTappedEventArgs(cell.Item1, cell.Item2, color);
             ColorDoubleTapped?.Invoke(this, e);
             return e.Handled;
+        }
+
+        #endregion
+
+        #region Properties.
+
+        public static readonly StyledProperty<Spreadbook> ContainerProperty = AvaloniaProperty.Register<Spreadsheet, Spreadbook>(nameof(Container));
+        public Spreadbook Container
+        {
+            get { return GetValue(ContainerProperty); }
+            set { SetValue(ContainerProperty, value); }
+        }
+
+        /// <summary>
+        /// Defines the <see cref="WorksheetIndex"/> property.
+        /// </summary>
+        public static readonly StyledProperty<int> WorksheetIndexProperty = AvaloniaProperty.Register<Spreadsheet, int>(nameof(WorksheetIndex));
+
+        /// <summary>
+        /// Zero-based index of this worksheet in Spreadbook.
+        /// </summary>
+        public int WorksheetIndex
+        {
+            get => GetValue(WorksheetIndexProperty);
+            set => SetValue(WorksheetIndexProperty, value);
+        }
+
+        /// <summary>
+        /// Defines the <see cref="WorksheetName"/> property.
+        /// </summary>
+        public static readonly StyledProperty<string> WorksheetNameProperty = AvaloniaProperty.Register<Spreadsheet, string>(nameof(WorksheetName));
+
+        /// <summary>
+        /// Zero-based index of this worksheet in Spreadbook.
+        /// </summary>
+        public string WorksheetName
+        {
+            get => GetValue(WorksheetNameProperty);
+            set => SetValue(WorksheetNameProperty, value);
         }
 
         /// <summary>
@@ -394,7 +489,19 @@ namespace Spreadalonia
             private set { SetAndRaise(CanRedoProperty, ref _canRedo, value); }
         }
 
+        /// <summary>
+        /// Defines the <see cref="Options"/> property.
+        /// </summary>
+        public static readonly StyledProperty<SpreadsheetOptions> OptionsProperty = AvaloniaProperty.Register<Spreadsheet, SpreadsheetOptions>(nameof(Options), new SpreadsheetOptions());
 
+        /// <summary>
+        /// Options.
+        /// </summary>
+        public SpreadsheetOptions Options
+        {
+            get => GetValue(OptionsProperty);
+            set => SetValue(OptionsProperty, value);
+        }
 
         internal (int, int) EditingCell { get; set; }
 
@@ -424,6 +531,8 @@ namespace Spreadalonia
         internal Stack<ValueStackFrame<int, Typeface>> RedoStackColumnTypeface { get; } = new Stack<ValueStackFrame<int, Typeface>>();
         internal Stack<ValueStackFrame<int, double>> RedoStackRowHeight { get; } = new Stack<ValueStackFrame<int, double>>();
         internal Stack<ValueStackFrame<int, double>> RedoStackColumnWidth { get; } = new Stack<ValueStackFrame<int, double>>();
+
+        #endregion
 
         /// <summary>
         /// Create a new <see cref="Spreadsheet"/> instance.
@@ -607,20 +716,24 @@ namespace Spreadalonia
 
                     if ((present && prevVal != newText) || (!present && !string.IsNullOrEmpty(newText)))
                     {
+                        var cell = new SpreadCell(this, EditingCell.Item1, EditingCell.Item2);
 
-                        if (!string.IsNullOrEmpty(newText))
+                        if (RaiseCellEditEnded(newText).Cancel == false)
                         {
-                            this.UndoStack.Push(new StackFrame<(int, int), string>(ImmutableList.Create(new SelectionRange(this.EditingCell)), new Dictionary<(int, int), string>() { { this.EditingCell, prevVal } }, new Dictionary<(int, int), string>() { { this.EditingCell, newText } }));
-                            ContentTable.Data[this.EditingCell] = newText;
-                        }
-                        else
-                        {
-                            this.UndoStack.Push(new StackFrame<(int, int), string>(ImmutableList.Create(new SelectionRange(this.EditingCell)), new Dictionary<(int, int), string>() { { this.EditingCell, prevVal } }, new Dictionary<(int, int), string>() { { this.EditingCell, null } }));
-                            ContentTable.Data.Remove(this.EditingCell);
-                        }
+                            if (!string.IsNullOrEmpty(newText))
+                            {
+                                this.UndoStack.Push(new StackFrame<(int, int), string>(ImmutableList.Create(new SelectionRange(this.EditingCell)), new Dictionary<(int, int), string>() { { this.EditingCell, prevVal } }, new Dictionary<(int, int), string>() { { this.EditingCell, newText } }));
+                                ContentTable.Data[this.EditingCell] = newText;
+                            }
+                            else
+                            {
+                                this.UndoStack.Push(new StackFrame<(int, int), string>(ImmutableList.Create(new SelectionRange(this.EditingCell)), new Dictionary<(int, int), string>() { { this.EditingCell, prevVal } }, new Dictionary<(int, int), string>() { { this.EditingCell, null } }));
+                                ContentTable.Data.Remove(this.EditingCell);
+                            }
 
-                        this.PushNonDataStackNull();
-                        this.ClearRedoStack();
+                            this.PushNonDataStackNull();
+                            this.ClearRedoStack();
+                        }
                     }
 
                     IsEditing = false;
@@ -688,20 +801,28 @@ namespace Spreadalonia
             TableContextMenu.Opening += async (s, e) =>
             {
                 CopyMenuItem.IsEnabled = this.Selection.Count > 0;
+                CopyMenuItem.IsVisible = Options.IsCopyEnabled;
                 CutMenuItem.IsEnabled = this.Selection.Count > 0;
+                CutMenuItem.IsVisible = Options.IsCutEnabled;
 
                 bool clipboardContainsText = await TopLevel.GetTopLevel(this)?.Clipboard.ContainsText();
                 PasteMenuItem.IsEnabled = this.Selection.Count == 1 && clipboardContainsText;
+                PasteMenuItem.IsVisible = Options.IsPasteEnabled;
                 PasteSkipBlanksMenuItem.IsEnabled = this.Selection.Count == 1 && clipboardContainsText;
+                PasteSkipBlanksMenuItem.IsVisible = Options.IsPasteEnabled;
 
-                InsertColMenuItem.IsVisible = this.Selection.Count == 1 && (this.Selection[0].IsColumns(ContentTable) && !this.Selection[0].IsRows(ContentTable));
-                DeleteColMenuItem.IsVisible = InsertColMenuItem.IsVisible;
+                var isColumnSelected = this.Selection.Count == 1 && (this.Selection[0].IsColumns(ContentTable) && !this.Selection[0].IsRows(ContentTable));
+                InsertColMenuItem.IsVisible = isColumnSelected && Options.IsInsertColumnsEnabled;
+                DeleteColMenuItem.IsVisible = isColumnSelected && Options.IsDeleteColumnsEnabled;
 
-                InsertRowMenuItem.IsVisible = this.Selection.Count == 1 && (this.Selection[0].IsRows(ContentTable) && !this.Selection[0].IsColumns(ContentTable));
-                DeleteRowMenuItem.IsVisible = InsertRowMenuItem.IsVisible;
+                var isRowSelected = this.Selection.Count == 1 && (this.Selection[0].IsRows(ContentTable) && !this.Selection[0].IsColumns(ContentTable));
+                InsertRowMenuItem.IsVisible = isRowSelected && Options.IsInsertRowsEnabled;
+                DeleteRowMenuItem.IsVisible = isRowSelected && Options.IsDeleteRowsEnabled;
 
                 ClearMenuItem.IsEnabled = this.Selection.Count > 0;
+                ClearMenuItem.IsVisible = Options.IsClearContentsEnabled;
                 ResetFormatMenuItem.IsEnabled = this.Selection.Count > 0;
+                ResetFormatMenuItem.IsVisible = Options.IsResetFormatEnabled;
 
                 AutoHeightMenuItem.IsVisible = this.Selection.Count > 0 && this.Selection.All(x => x.IsRows(ContentTable) && !x.IsColumns(ContentTable));
                 ResetHeightMenuItem.IsVisible = AutoHeightMenuItem.IsVisible;
@@ -712,36 +833,44 @@ namespace Spreadalonia
                 LastSeparator.IsVisible = AutoWidthMenuItem.IsVisible || AutoHeightMenuItem.IsVisible;
             };
 
-            CopyMenuItem.Click += (s, e) => Copy();
-            CutMenuItem.Click += (s, e) => Cut();
-            PasteMenuItem.Click += async (s, e) => await Paste(true);
-            PasteSkipBlanksMenuItem.Click += async (s, e) => await Paste(false);
+            CopyMenuItem.Click += (s, e) => 
+                Helper.DoIfEnabled(Copy, Options.IsCopyEnabled);
 
-            ClearMenuItem.Click += (s, e) => ClearContents();
+            CutMenuItem.Click += (s, e) => 
+                Helper.DoIfEnabled(Cut, Options.IsCutEnabled);
+
+            PasteMenuItem.Click += async (s, e) => 
+                await Helper.DoIfEnabled(Paste, true, Options.IsPasteEnabled);
+
+            PasteSkipBlanksMenuItem.Click += async (s, e) => 
+                await Helper.DoIfEnabled(Paste, false, Options.IsPasteEnabled);
+
+            ClearMenuItem.Click += (s, e) => 
+                Helper.DoIfEnabled(ClearContents, Options.IsClearContentsEnabled);
 
             InsertColMenuItem.Click += (s, e) =>
             {
-                InsertColumns();
+                Helper.DoIfEnabled(InsertColumns, Options.IsInsertColumnsEnabled);
             };
 
             DeleteColMenuItem.Click += (s, e) =>
             {
-                DeleteColumns();
+                Helper.DoIfEnabled(DeleteColumns, Options.IsDeleteColumnsEnabled);
             };
 
             InsertRowMenuItem.Click += (s, e) =>
             {
-                InsertRows();
+                Helper.DoIfEnabled(InsertRows, Options.IsInsertRowsEnabled);
             };
 
             DeleteRowMenuItem.Click += (s, e) =>
             {
-                DeleteRows();
+                Helper.DoIfEnabled(DeleteRows, Options.IsDeleteRowsEnabled);
             };
 
             ResetFormatMenuItem.Click += (s, e) =>
             {
-                ResetFormat();
+                Helper.DoIfEnabled(ResetFormat, Options.IsResetFormatEnabled);
             };
 
             AutoWidthMenuItem.Click += (s, e) =>
@@ -1050,6 +1179,9 @@ namespace Spreadalonia
                 SelectionRange startSelection = this.Selection[this.Selection.Count - 1];
                 this.Selection = ImmutableList.Create(new SelectionRange(startSelection.Left, startSelection.Top));
                 this.EditingCell = (startSelection.Left, startSelection.Top);
+
+                if (RaiseCellEditStarted().Cancel) return;
+
                 IsEditing = true;
                 EditingBox.Text = e.Text;
                 EditingBox.SelectionStart = e.Text.Length;
@@ -1239,6 +1371,30 @@ namespace Spreadalonia
             }
 
             return tbr.ToString();
+        }
+
+        public int TopSelectedRow => Selection.Min(range => range.Top);
+
+        public int BottomSelectedRow => Selection.Max(range => range.Bottom);
+
+        public List<SpreadCell> GetSelectedCells()
+        {
+            var data = Helper.Array2dToFlatten(GetSelectedData(out var coordinates2d)).ToList();
+
+            var coordinates = Helper.Array2dToFlatten(coordinates2d).ToList();
+
+            var selectedCells =
+                coordinates
+                    .Zip(
+                        data,
+                        (address, text) =>
+                            new SpreadCell(this, address)
+                            {
+                                TextValue = text
+                            })
+                    .ToList();
+
+            return selectedCells;
         }
 
         /// <summary>
@@ -1435,6 +1591,15 @@ namespace Spreadalonia
         {
             if (this.Selection.Count > 0)
             {
+                var oldCellsContent = GetSelectedCells();
+
+                var newCellsContent =
+                    oldCellsContent
+                        .Select(c => new SpreadCell(c.Worksheet, c.Column, c.Row, textValue: null))
+                        .ToList();
+
+                if (RaiseMassiveCellsEditStarted(oldCellsContent, newCellsContent, Selection).Cancel) return;
+
                 ContentTable.Data = ContentTable.Data.Remove(this.Selection, this.UndoStack);
                 PushNonDataStackNull();
                 this.ClearRedoStack();
@@ -1839,28 +2004,68 @@ namespace Spreadalonia
 
             if (this.Selection.Count == 1 && !this.Selection[0].IsColumns(table) && this.Selection[0].IsRows(table))
             {
-                table.Data = table.Data.InsertRows(this.Selection[0], this.UndoStack);
-
-                table.CellForeground = table.CellForeground.InsertRows(this.Selection[0], this.UndoStackCellForeground);
-                table.CellMargin = table.CellMargin.InsertRows(this.Selection[0], this.UndoStackCellMargin);
-                table.CellTextAlignment = table.CellTextAlignment.InsertRows(this.Selection[0], this.UndoStackCellHorizontalAlignment);
-                table.CellTypefaces = table.CellTypefaces.InsertRows(this.Selection[0], this.UndoStackCellTypeface);
-                table.CellVerticalAlignment = table.CellVerticalAlignment.InsertRows(this.Selection[0], this.UndoStackCellVerticalAlignment);
-
-                table.RowForeground = table.RowForeground.Insert(this.Selection[0].Top, this.Selection[0].Height, this.Selection[0], this.UndoStackRowForeground);
-                table.RowTypefaces = table.RowTypefaces.Insert(this.Selection[0].Top, this.Selection[0].Height, this.Selection[0], this.UndoStackRowTypeface);
-                table.RowHeights = table.RowHeights.Insert(this.Selection[0].Top, this.Selection[0].Height, this.Selection[0], this.UndoStackRowHeight);
-
-                this.UndoStackColumnForeground.Push(null);
-                this.UndoStackColumnWidth.Push(null);
-                this.UndoStackColumnTypeface.Push(null);
-
-                ClearRedoStack();
-
-                table.InvalidateVisual();
-                HorizontalHeaderControl.InvalidateVisual();
-                VerticalHeaderControl.InvalidateVisual();
+                InsertRows(this.Selection[0]);
             }
+        }
+
+        /// <summary>
+        /// Inserts a row just after the last selected row.
+        /// </summary>
+        public void AppendRowAfterBottomSelected()
+        {
+            var row = BottomSelectedRow;
+            AppendRowsAfter(row);
+        }
+
+        /// <summary>
+        /// Inserts rows just after specified row index.
+        /// </summary>
+        public void AppendRowsAfter(int appendAfterThisRowIndex, int numberOfRowsToAdd = 1)
+        {
+            var rowAfterSelected = new SelectionRange(
+                0, appendAfterThisRowIndex + 1,
+                0, appendAfterThisRowIndex + numberOfRowsToAdd);
+
+            InsertRows(rowAfterSelected);
+        }
+
+        public void InsertRows(SelectionRange rowAfterSelected)
+        {
+            Table table = ContentTable;
+
+            table.Data = table.Data.InsertRows(rowAfterSelected, this.UndoStack);
+
+            table.CellForeground = table.CellForeground.InsertRows(rowAfterSelected, this.UndoStackCellForeground);
+            table.CellMargin = table.CellMargin.InsertRows(rowAfterSelected, this.UndoStackCellMargin);
+            table.CellTextAlignment = table.CellTextAlignment.InsertRows(rowAfterSelected, this.UndoStackCellHorizontalAlignment);
+            table.CellTypefaces = table.CellTypefaces.InsertRows(rowAfterSelected, this.UndoStackCellTypeface);
+            table.CellVerticalAlignment = table.CellVerticalAlignment.InsertRows(rowAfterSelected, this.UndoStackCellVerticalAlignment);
+
+            table.RowForeground = table.RowForeground.Insert(rowAfterSelected.Top, rowAfterSelected.Height, rowAfterSelected, this.UndoStackRowForeground);
+            table.RowTypefaces = table.RowTypefaces.Insert(rowAfterSelected.Top, rowAfterSelected.Height, rowAfterSelected, this.UndoStackRowTypeface);
+            table.RowHeights = table.RowHeights.Insert(rowAfterSelected.Top, rowAfterSelected.Height, rowAfterSelected, this.UndoStackRowHeight);
+
+            this.UndoStackColumnForeground.Push(null);
+            this.UndoStackColumnWidth.Push(null);
+            this.UndoStackColumnTypeface.Push(null);
+
+            ClearRedoStack();
+
+            table.InvalidateVisual();
+            HorizontalHeaderControl.InvalidateVisual();
+            VerticalHeaderControl.InvalidateVisual();
+        }
+
+        /// <summary>
+        /// Deletes specified rows.
+        /// </summary>
+        public void DeleteRows(int rowFrom, int count = 1)
+        {
+            var selection = new SelectionRange(
+                0, rowFrom,
+                0, rowFrom + count - 1);
+
+            DeleteRows(selection);
         }
 
         /// <summary>
@@ -1872,28 +2077,65 @@ namespace Spreadalonia
 
             if (this.Selection.Count == 1 && !this.Selection[0].IsColumns(table) && this.Selection[0].IsRows(table))
             {
-                table.Data = table.Data.DeleteRows(this.Selection[0], this.UndoStack);
-
-                table.CellForeground = table.CellForeground.DeleteRows(this.Selection[0], this.UndoStackCellForeground);
-                table.CellMargin = table.CellMargin.DeleteRows(this.Selection[0], this.UndoStackCellMargin);
-                table.CellTextAlignment = table.CellTextAlignment.DeleteRows(this.Selection[0], this.UndoStackCellHorizontalAlignment);
-                table.CellTypefaces = table.CellTypefaces.DeleteRows(this.Selection[0], this.UndoStackCellTypeface);
-                table.CellVerticalAlignment = table.CellVerticalAlignment.DeleteRows(this.Selection[0], this.UndoStackCellVerticalAlignment);
-
-                table.RowForeground = table.RowForeground.Delete(this.Selection[0].Top, this.Selection[0].Height, this.Selection[0], this.UndoStackRowForeground);
-                table.RowTypefaces = table.RowTypefaces.Delete(this.Selection[0].Top, this.Selection[0].Height, this.Selection[0], this.UndoStackRowTypeface);
-                table.RowHeights = table.RowHeights.Delete(this.Selection[0].Top, this.Selection[0].Height, this.Selection[0], this.UndoStackRowHeight);
-
-                this.UndoStackColumnForeground.Push(null);
-                this.UndoStackColumnWidth.Push(null);
-                this.UndoStackColumnTypeface.Push(null);
-
-                ClearRedoStack();
-
-                table.InvalidateVisual();
-                HorizontalHeaderControl.InvalidateVisual();
-                VerticalHeaderControl.InvalidateVisual();
+                DeleteRows(this.Selection[0]);
             }
+        }
+
+        public void DeleteRows(SelectionRange selection)
+        {
+            Table table = ContentTable;
+            table.Data = table.Data.DeleteRows(selection, this.UndoStack);
+
+            table.CellForeground = table.CellForeground.DeleteRows(selection, this.UndoStackCellForeground);
+            table.CellMargin = table.CellMargin.DeleteRows(selection, this.UndoStackCellMargin);
+            table.CellTextAlignment = table.CellTextAlignment.DeleteRows(selection, this.UndoStackCellHorizontalAlignment);
+            table.CellTypefaces = table.CellTypefaces.DeleteRows(selection, this.UndoStackCellTypeface);
+            table.CellVerticalAlignment = table.CellVerticalAlignment.DeleteRows(selection, this.UndoStackCellVerticalAlignment);
+
+            table.RowForeground = table.RowForeground.Delete(selection.Top, selection.Height, selection, this.UndoStackRowForeground);
+            table.RowTypefaces = table.RowTypefaces.Delete(selection.Top, selection.Height, selection, this.UndoStackRowTypeface);
+            table.RowHeights = table.RowHeights.Delete(selection.Top, selection.Height, selection, this.UndoStackRowHeight);
+
+            this.UndoStackColumnForeground.Push(null);
+            this.UndoStackColumnWidth.Push(null);
+            this.UndoStackColumnTypeface.Push(null);
+
+            ClearRedoStack();
+
+            table.InvalidateVisual();
+            HorizontalHeaderControl.InvalidateVisual();
+            VerticalHeaderControl.InvalidateVisual();
+        }
+
+        /// <summary>
+        /// Copy data from first specified row to second.
+        /// </summary>
+        /// <param name="sourceRow">Copy data from this row.</param>
+        /// <param name="destinationRow">Paste data to this row.</param>
+        public void CopyRowContent(int sourceRow, int destinationRow)
+        {
+            var newData =
+                Data
+                .Where(kvp => kvp.Key.Item2 == sourceRow)
+                .Select(kvp => new KeyValuePair<(int, int), string>((kvp.Key.Item1, destinationRow), kvp.Value))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            
+            SetData(newData);
+        }
+
+        /// <summary>
+        /// Copy data from first specified row to second.
+        /// </summary>
+        /// <param name="rowFrom">Clear data from this row.</param>
+        /// <param name="count">How many rows to clear.</param>
+        public void ClearRowsContent(int rowFrom, int count = 1)
+        {
+            var newData =
+                Data
+                .Where(kvp => kvp.Key.Item2.IsWithin(rowFrom, rowFrom + count - 1))
+                .ToDictionary(kvp => kvp.Key, _ => string.Empty);
+            
+            SetData(newData);
         }
 
         /// <summary>
@@ -2033,6 +2275,69 @@ namespace Spreadalonia
                 horizontalHeader.InvalidateVisual();
             }
         }
+
+        /// <summary>
+        /// Automatically determines the height of all rows.
+        /// </summary>
+        public void AutoFitHeightAllRows()
+        {
+            Table table = ContentTable;
+
+            VerticalHeader verticalHeader = VerticalHeaderControl;
+
+            Dictionary<int, Reference<double>> previousHeights = new Dictionary<int, Reference<double>>();
+            Dictionary<int, Reference<double>> newHeights = new Dictionary<int, Reference<double>>();
+
+            int bottomRowIndex = Data.Max(k => k.Key.Item2);
+
+            for (int i = 0; i <= bottomRowIndex; i++)
+            {
+                if (this.UndoStack != null && !previousHeights.ContainsKey(i))
+                {
+                    if (table.RowHeights.TryGetValue(i, out double prevVal))
+                    {
+                        previousHeights[i] = prevVal;
+                    }
+                    else
+                    {
+                        previousHeights[i] = null;
+                    }
+                }
+
+                Reference<double> newHeight = verticalHeader.AutoFitHeightWithoutStack(i);
+
+                if (this.UndoStack != null)
+                {
+                    newHeights[i] = newHeight;
+                }
+            }
+
+            if (this.UndoStack != null)
+            {
+                this.UndoStackRowHeight.Push(new ValueStackFrame<int, double>(this.Selection, previousHeights, newHeights));
+
+                this.UndoStack.Push(null);
+
+                this.UndoStackRowForeground.Push(null);
+                this.UndoStackRowTypeface.Push(null);
+
+                this.UndoStackColumnForeground.Push(null);
+                this.UndoStackColumnTypeface.Push(null);
+                this.UndoStackColumnWidth.Push(null);
+
+                this.UndoStackCellForeground.Push(null);
+                this.UndoStackCellMargin.Push(null);
+                this.UndoStackCellHorizontalAlignment.Push(null);
+                this.UndoStackCellTypeface.Push(null);
+                this.UndoStackCellVerticalAlignment.Push(null);
+
+                this.ClearRedoStack();
+            }
+
+            table.InvalidateVisual();
+            verticalHeader.InvalidateVisual();
+        }
+
 
         /// <summary>
         /// Automatically determines the height of the selected rows.
@@ -2530,6 +2835,34 @@ namespace Spreadalonia
         }
 
         /// <summary>
+        /// Sets the foreground colour.
+        /// </summary>
+        /// <param name="foreground">The foreground colour to set.</param>
+        public void SetForeground(int row, int column, IBrush foreground)
+        {
+            Table table = ContentTable;
+
+            var selection = ImmutableList.Create(new SelectionRange(column, row));
+
+            table.CellForeground.SetValue(selection, foreground, this.UndoStackCellForeground);
+
+            this.UndoStack.Push(null);
+
+            this.UndoStackRowTypeface.Push(null);
+            this.UndoStackRowHeight.Push(null);
+
+            this.UndoStackColumnTypeface.Push(null);
+            this.UndoStackColumnWidth.Push(null);
+
+            this.UndoStackCellTypeface.Push(null);
+            this.UndoStackCellMargin.Push(null);
+            this.UndoStackCellHorizontalAlignment.Push(null);
+            this.UndoStackCellVerticalAlignment.Push(null);
+            this.RedoStack.Clear();
+            table.InvalidateVisual();
+        }
+
+        /// <summary>
         /// Sets the foreground colour of the current selection.
         /// </summary>
         /// <param name="foreground">The foreground colour to set.</param>
@@ -2735,6 +3068,19 @@ namespace Spreadalonia
                     table.InvalidateVisual();
                 }
             }
+        }
+
+        /// <summary>
+        /// Set the value of the specified cell.
+        /// </summary>
+        public void SetData(int column, int row, string data)
+        {
+            var dataDictionary = new Dictionary<(int, int), string>
+            {
+                { (column, row), data }
+            };
+
+            SetData(dataDictionary);
         }
 
         /// <summary>
@@ -3011,7 +3357,7 @@ namespace Spreadalonia
                         }
                         else if (e.KeyModifiers == KeyModifiers.Alt)
                         {
-                            ClearContents();
+                            Helper.DoIfEnabled(ClearContents, Options.IsClearContentsEnabled);
                         }
 
                         e.Handled = true;
@@ -3022,6 +3368,9 @@ namespace Spreadalonia
                         {
                             this.Selection = ImmutableList.Create(new SelectionRange(startSelection.Left, startSelection.Top));
                             this.EditingCell = (startSelection.Left, startSelection.Top);
+
+                            if (RaiseCellEditStarted().Cancel) return;
+
                             IsEditing = true;
 
                             e.Handled = true;
@@ -3031,11 +3380,11 @@ namespace Spreadalonia
                     {
                         if (e.KeyModifiers == KeyModifiers.None || e.KeyModifiers == Spreadsheet.ControlModifier)
                         {
-                            ClearContents();
+                            Helper.DoIfEnabled(ClearContents, Options.IsClearContentsEnabled);
                         }
                         else if (e.KeyModifiers == KeyModifiers.Shift)
                         {
-                            Cut();
+                            Helper.DoIfEnabled(Cut, Options.IsCutEnabled);
                         }
 
                         e.Handled = true;
@@ -3046,6 +3395,9 @@ namespace Spreadalonia
                         {
                             this.Selection = ImmutableList.Create(new SelectionRange(startSelection.Left, startSelection.Top));
                             this.EditingCell = (startSelection.Left, startSelection.Top);
+
+                            if (RaiseCellEditStarted().Cancel) return;
+
                             IsEditing = true;
                             EditingBox.Text = "";
 
@@ -3123,32 +3475,32 @@ namespace Spreadalonia
                     }
                     else if ((e.Key == Key.C && e.KeyModifiers == Spreadsheet.ControlModifier) || (e.Key == Key.Insert && e.KeyModifiers == Spreadsheet.ControlModifier))
                     {
-                        Copy();
+                        Helper.DoIfEnabled(Copy, Options.IsCopyEnabled);
                         e.Handled = true;
                     }
                     else if ((e.Key == Key.X && e.KeyModifiers == Spreadsheet.ControlModifier))
                     {
-                        Cut();
+                        Helper.DoIfEnabled(Cut, Options.IsCutEnabled);
                         e.Handled = true;
                     }
                     else if ((e.Key == Key.V && e.KeyModifiers == Spreadsheet.ControlModifier) || (e.Key == Key.Insert && e.KeyModifiers == KeyModifiers.Shift))
                     {
-                        _ = Paste(true);
+                        _ = Helper.DoIfEnabled(Paste, true, Options.IsPasteEnabled);
                         e.Handled = true;
                     }
                     else if ((e.Key == Key.V && e.KeyModifiers == (Spreadsheet.ControlModifier | KeyModifiers.Shift)) || (e.Key == Key.Insert && e.KeyModifiers == (KeyModifiers.Shift | KeyModifiers.Alt)))
                     {
-                        _ = Paste(false);
+                        _ = Helper.DoIfEnabled(Paste, false, Options.IsPasteEnabled);
                         e.Handled = true;
                     }
                     else if (e.Key == Key.Z && e.KeyModifiers == Spreadsheet.ControlModifier)
                     {
-                        Undo();
+                        Helper.DoIfEnabled(Undo, Options.IsUndoEnabled);
                         e.Handled = true;
                     }
                     else if (e.Key == Key.Y && e.KeyModifiers == Spreadsheet.ControlModifier)
                     {
-                        Redo();
+                        Helper.DoIfEnabled(Redo, Options.IsRedoEnabled);
                         e.Handled = true;
                     }
                     else if (e.Key == Key.Tab)
@@ -3254,12 +3606,12 @@ namespace Spreadalonia
                 }
                 else if (e.Key == Key.Z && e.KeyModifiers == Spreadsheet.ControlModifier)
                 {
-                    Undo();
+                    Helper.DoIfEnabled(Undo, Options.IsUndoEnabled);
                     e.Handled = true;
                 }
                 else if (e.Key == Key.Y && e.KeyModifiers == Spreadsheet.ControlModifier)
                 {
-                    Redo();
+                    Helper.DoIfEnabled(Redo, Options.IsRedoEnabled);
                     e.Handled = true;
                 }
             }
@@ -4045,74 +4397,6 @@ namespace Spreadalonia
         public string GetRowSeparator()
         {
             return new Xeger(Regex.Unescape(this.RowSeparator.ToString()), new Random(20230926)).Generate();
-        }
-    }
-
-    /// <summary>
-    /// <see cref="EventArgs"/> for the <see cref="Spreadsheet.CellSizeChanged"/> event.
-    /// </summary>
-    public class CellSizeChangedEventArgs : EventArgs
-    {
-        /// <summary>
-        /// The new width of the cell.
-        /// </summary>
-        public double Width { get; }
-
-        /// <summary>
-        /// The new height of the cell.
-        /// </summary>
-        public double Height { get; }
-
-        /// <summary>
-        /// The horizontal coordinate of the cell.
-        /// </summary>
-        public int Left { get; }
-
-        /// <summary>
-        /// The vertical coordinate of the cell.
-        /// </summary>
-        public int Top { get; }
-
-        internal CellSizeChangedEventArgs(int left, int top, double width, double height) : base()
-        {
-            this.Left = left;
-            this.Top = top;
-            this.Width = width;
-            this.Height = height;
-        }
-    }
-
-    /// <summary>
-    /// <see cref="EventArgs"/> for the <see cref="Spreadsheet.ColorDoubleTapped"/> event.
-    /// </summary>
-    public class ColorDoubleTappedEventArgs : EventArgs
-    {
-        /// <summary>
-        /// The horizontal coordinate of the cell.
-        /// </summary>
-        public int Left { get; }
-
-        /// <summary>
-        /// The vertical coordinate of the cell.
-        /// </summary>
-        public int Top { get; }
-
-        /// <summary>
-        /// The colour contained in the cell.
-        /// </summary>
-        public Color Color { get; }
-
-        /// <summary>
-        /// Set this to <see langword="true"/> to signal that the event has been completely handled.
-        /// </summary>
-        public bool Handled { get; set; }
-
-        internal ColorDoubleTappedEventArgs(int left, int top, Color color) : base()
-        {
-            Left = left;
-            Top = top;
-            Color = color;
-            Handled = false;
         }
     }
 }
