@@ -24,4 +24,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Spreadalonia\Spreadalonia.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="sample_workbook.xlsx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

@@ -6,6 +6,15 @@
         mc:Ignorable="d" Width="800" Height="450"
         x:Class="Demo.MainWindow"
         Title="Demo">
-	<local:Spreadsheet>
-	</local:Spreadsheet>
+
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem x:Name="OpenFileMenuItem" Header="_Open..." Click="OpenFileMenuItem_Click"/>
+      </MenuItem>
+    </Menu>
+    <local:Spreadbook 
+      x:Name="spreadbook" />
+  </DockPanel>
+
 </Window>

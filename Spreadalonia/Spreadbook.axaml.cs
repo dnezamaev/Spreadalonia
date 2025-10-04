@@ -110,6 +110,7 @@ public partial class Spreadbook : UserControl
     public void LoadEpplusDocument(ExcelWorkbook workbook)
     {
         spreadsheets.Clear();
+        bookTabControl.Items.Clear();
 
         var eppWorksheets = GetEppWorksheets(workbook);
 
