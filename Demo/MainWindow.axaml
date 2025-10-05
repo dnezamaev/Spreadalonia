@@ -14,7 +14,8 @@
       </MenuItem>
     </Menu>
     <local:Spreadbook 
-      x:Name="spreadbook" />
+      x:Name="spreadbook"
+      AllSpreadsheetsInitialized="Spreadbook_AllSpreadsheetsInitialized"/>
   </DockPanel>
 
 </Window>

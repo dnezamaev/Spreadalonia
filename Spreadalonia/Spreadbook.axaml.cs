@@ -46,6 +46,8 @@ public partial class Spreadbook : UserControl
     public Spreadsheet SelectedSpreadsheet => 
         bookTabControl.SelectedContent as Spreadsheet;
 
+    public ExcelWorkbook EpplusWorkbook { get; private set; }
+
     #endregion
 
     #region Events.
@@ -77,7 +79,32 @@ public partial class Spreadbook : UserControl
     internal SpreadCellEditEndedEventArgs RaiseCellEditEnded(SpreadCellEditEndedEventArgs eventArgs)
     {
         CellEditEnded?.Invoke(this, eventArgs);
+
+        if (eventArgs.Cancel) return eventArgs;
+
+        UpdateEpplusCellValue(eventArgs.Cell, eventArgs.NewText);
+        EpplusWorkbook.Calculate();
+        ReloadDataFromEpplus();
+
         return eventArgs;
+    }
+
+    private void UpdateEpplusCellValue(SpreadCell cell, string newText)
+    {
+        var worksheetName = cell.Worksheet.WorksheetName;
+        var epplusWorksheet = FindSpreadsheetInfo(worksheetName).EpplusWorksheet;
+
+        epplusWorksheet.Cells[cell.Row + 1, cell.Column + 1].Value = newText;
+    }
+
+    private void ReloadDataFromEpplus()
+    {
+        foreach (var epplusWorksheet in EpplusWorkbook.Worksheets)
+        {
+            var data = GetDataForSpreadsheet(epplusWorksheet);
+            var spreadsheet = FindSpreadsheet(epplusWorksheet.Name);
+            spreadsheet.SetData(data);
+        }
     }
 
     public event EventHandler<SpreadCell> CellDoubleClicked;
@@ -96,6 +123,8 @@ public partial class Spreadbook : UserControl
 
     #endregion
 
+    #region Initialization.
+
     public Spreadbook()
     {
         InitializeComponent();
@@ -104,18 +133,9 @@ public partial class Spreadbook : UserControl
         spreadsheets = new List<Spreadsheet>();
     }
 
-    /// <summary>
-    /// Load excel document.
-    /// </summary>
-    public void LoadEpplusDocument(ExcelWorkbook workbook)
-    {
-        spreadsheets.Clear();
-        bookTabControl.Items.Clear();
+    #endregion
 
-        var eppWorksheets = GetEppWorksheets(workbook);
-
-        FillTabControl(eppWorksheets);
-    }
+    #region Getting spreadsheets and their info.
 
     public Spreadsheet FindSpreadsheet(string sheetName)
     {
@@ -127,15 +147,46 @@ public partial class Spreadbook : UserControl
         return spreadsheets.FirstOrDefault(s => s.WorksheetIndex == sheetIndex);
     }
 
-    private static IEnumerable<ExcelWorksheet> GetEppWorksheets(ExcelWorkbook workbook)
+    public SpreadsheetInfo FindSpreadsheetInfo(string sheetName)
+    {
+        return spreadsheets.FirstOrDefault(s => s.WorksheetName == sheetName)?.Tag as SpreadsheetInfo;
+    }
+
+    public SpreadsheetInfo FindSpreadsheetInfo(int sheetIndex)
+    {
+        return spreadsheets.FirstOrDefault(s => s.WorksheetIndex == sheetIndex)?.Tag as SpreadsheetInfo;
+    }
+
+    #endregion
+
+    #region Loading Excel document.
+
+    /// <summary>
+    /// Load excel document.
+    /// </summary>
+    public void LoadEpplusDocument(ExcelWorkbook workbook)
+    {
+        this.EpplusWorkbook = 
+            workbook ?? throw new ArgumentNullException(nameof(workbook));
+
+        spreadsheets.Clear();
+        bookTabControl.Items.Clear();
+
+        var epplusWorksheets = GetEpplusWorksheets(workbook);
+
+        EpplusWorkbook.Calculate();
+        FillTabControl(epplusWorksheets);
+    }
+
+    private static IEnumerable<ExcelWorksheet> GetEpplusWorksheets(ExcelWorkbook workbook)
     {
         return workbook.Worksheets
             .Where(s => s.Hidden == eWorkSheetHidden.Visible);
     }
 
-    private void FillTabControl(IEnumerable<ExcelWorksheet> eppWorksheets)
+    private void FillTabControl(IEnumerable<ExcelWorksheet> epplusWorksheets)
     {
-        foreach (var worksheet in eppWorksheets)
+        foreach (var worksheet in epplusWorksheets)
         {
             AddTabItem(worksheet);
         }
@@ -161,14 +212,8 @@ public partial class Spreadbook : UserControl
 
     private void AddTabItem(ExcelWorksheet worksheet)
     {
-        var tag = new SpreadsheetInfo
-        {
-            EppWorksheet = worksheet
-        };
-
         var spreadsheet = new Spreadsheet
         {
-            Tag = tag,
             Container = this,
             WorksheetIndex = worksheet.Index,
             WorksheetName = worksheet.Name,
@@ -186,13 +231,25 @@ public partial class Spreadbook : UserControl
         };
 
         bookTabControl.Items.Add(tabItem);
+
+        var tag = new SpreadsheetInfo
+        {
+            TabItem = tabItem,
+            Spreadsheet = spreadsheet,
+            EpplusWorksheet = worksheet
+        };
+
+        spreadsheet.Tag = tag;
+
+        // Force spreadsheets initialization.
+        tabItem.IsSelected = true;
     }
 
     void OnSpreadsheetInitialized(object? o, EventArgs eventArgs)
     {
         var spreadsheet = o as Spreadsheet;
         var tag = spreadsheet.Tag as SpreadsheetInfo;
-        var worksheet = tag.EppWorksheet;
+        var worksheet = tag.EpplusWorksheet;
 
         var data = GetDataForSpreadsheet(worksheet);
         spreadsheet.SetData(data);
@@ -210,6 +267,7 @@ public partial class Spreadbook : UserControl
 
         if (spreadsheets.All(s => s.IsInitialized))
         {
+            (bookTabControl.Items.FirstOrDefault() as TabItem).IsSelected = true;
             OnAllSpreadsheetsInitialized();
         }
     }
@@ -218,7 +276,7 @@ public partial class Spreadbook : UserControl
     {
         var hiddenRows = new Dictionary<int, double>();
 
-        for (int i = 1; i < worksheet.Dimension.End.Row; i++)
+        for (int i = 1; i < worksheet.Dimension?.End?.Row; i++)
         {
             var row = worksheet.Rows[i];
 
@@ -237,7 +295,7 @@ public partial class Spreadbook : UserControl
     {
         var hiddenColumns = new Dictionary<int, double>();
 
-        for (int i = 1; i < worksheet.Dimension.End.Column; i++)
+        for (int i = 1; i < worksheet.Dimension?.End?.Column; i++)
         {
             var column = worksheet.Columns[i];
 
@@ -256,7 +314,7 @@ public partial class Spreadbook : UserControl
     {
         var widthDictionary = new Dictionary<int, double>();
 
-        for (int i = 1; i < worksheet.Dimension.End.Column; i++)
+        for (int i = 1; i < worksheet.Dimension?.End?.Column; i++)
         {
             var column = worksheet.Columns[i];
 
@@ -270,9 +328,13 @@ public partial class Spreadbook : UserControl
     {
         AllSpreadsheetsInitialized?.Invoke(this, EventArgs.Empty);
     }
+
+    #endregion
 }
 
 public class SpreadsheetInfo
 {
-    public ExcelWorksheet EppWorksheet { get; set; }
+    public TabItem TabItem { get; set; }
+    public Spreadsheet Spreadsheet { get; set; }
+    public ExcelWorksheet EpplusWorksheet { get; set; }
 }

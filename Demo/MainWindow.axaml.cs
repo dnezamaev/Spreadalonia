@@ -17,8 +17,12 @@ namespace Demo
 
             FileHelpers.InitEpplus();
 
+            // Load clean Excel document.
             var cleanExcel = FileHelpers.CreateEmptyExcelPackage();
-            spreadbook.LoadEpplusDocument(cleanExcel.Workbook);
+            //spreadbook.LoadEpplusDocument(cleanExcel.Workbook);
+
+            // Load a sample Excel document.
+            spreadbook.LoadEpplusDocument(FileHelpers.LoadExcelPackage("sample_workbook.xlsx").Workbook);
         }
 
         private async void OpenFileMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -32,6 +36,10 @@ namespace Demo
             }
 
             spreadbook.LoadEpplusDocument(epplus.Workbook);
+        }
+
+        private void Spreadbook_AllSpreadsheetsInitialized(object? sender, System.EventArgs e)
+        {
         }
     }
 }

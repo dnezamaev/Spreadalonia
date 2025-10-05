@@ -61,7 +61,6 @@ namespace Demo
         {
             var package = new ExcelPackage();
             var worksheet = package.Workbook.Worksheets.Add("Sheet1");
-            worksheet.Cells["A1"].Value = "Hello!";
             return package;
         }
     }

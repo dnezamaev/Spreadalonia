@@ -2281,6 +2281,11 @@ namespace Spreadalonia
         /// </summary>
         public void AutoFitHeightAllRows()
         {
+            if (Data?.Count == 0)
+            {
+                return;
+            }
+
             Table table = ContentTable;
 
             VerticalHeader verticalHeader = VerticalHeaderControl;
