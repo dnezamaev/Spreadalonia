@@ -15,14 +15,28 @@ namespace Demo
         {
             InitializeComponent();
 
+            LoadDocument();
+        }
+
+        private void LoadDocument()
+        {
             FileHelpers.InitEpplus();
 
-            // Load clean Excel document.
-            var cleanExcel = FileHelpers.CreateEmptyExcelPackage();
-            //spreadbook.LoadEpplusDocument(cleanExcel.Workbook);
+            ExcelPackage excel;
 
-            // Load a sample Excel document.
-            spreadbook.LoadEpplusDocument(FileHelpers.LoadExcelPackage("sample_workbook.xlsx").Workbook);
+            if (Design.IsDesignMode)
+            {
+                // Keep Avalonia designer simple and fast.
+                // Load clean Excel document.
+                excel = FileHelpers.CreateEmptyExcelPackage();
+            }
+            else
+            {
+                // Load sample content-rich Excel document for application.
+                excel = FileHelpers.LoadExcelPackage("sample_workbook.xlsx");
+            }
+
+            spreadbook.LoadEpplusDocument(excel.Workbook);
         }
 
         private async void OpenFileMenuItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
