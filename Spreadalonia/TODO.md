@@ -1,5 +1,6 @@
 ﻿- Merged cells 
 - Background color for cells
+- Show date values according to excel format.
 - Autofit column width and row height based on Excel
 - Update README
 - Update Demo. Add options, new events and methods exapmles.

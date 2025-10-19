@@ -11,11 +11,12 @@
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="_File">
         <MenuItem x:Name="OpenFileMenuItem" Header="_Open..." Click="OpenFileMenuItem_Click"/>
+        <MenuItem x:Name="SaveFileMenuItem" Header="_Save..." Click="SaveFileMenuItem_Click"/>
       </MenuItem>
     </Menu>
     <local:Spreadbook 
       x:Name="spreadbook"
-      AllSpreadsheetsInitialized="Spreadbook_AllSpreadsheetsInitialized"/>
+      AllSpreadsheetsLoaded="Spreadbook_AllSpreadsheetsLoaded"/>
   </DockPanel>
 
 </Window>

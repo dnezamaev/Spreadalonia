@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -55,7 +56,7 @@ public partial class Spreadbook : UserControl
     /// <summary>
     /// Raises when all worksheets are initialized.
     /// </summary>
-    public event EventHandler AllSpreadsheetsInitialized;
+    public event EventHandler AllSpreadsheetsLoaded;
 
     public event EventHandler<MassiveSpreadCellsEditStartedEventArgs> MassiveCellsEditStarted;
 
@@ -190,6 +191,20 @@ public partial class Spreadbook : UserControl
         {
             AddTabItem(worksheet);
         }
+
+        // Delay setting data, because Spreadsheet.Data is null until Spreadsheet is initialised.
+        foreach (var spreadsheet in spreadsheets)
+        {
+            spreadsheet.Loaded += OnSpreadsheetLoaded;
+        }
+
+        // Force spreadsheets initialization.
+        foreach (var spreadsheet in spreadsheets)
+        {
+            var info = spreadsheet.Tag as SpreadsheetInfo;
+            var tabItem = info.TabItem;
+            tabItem.IsSelected = true;
+        }
     }
 
     private static IEnumerable<KeyValuePair<(int, int), string>> GetDataForSpreadsheet(ExcelWorksheet worksheet)
@@ -222,8 +237,6 @@ public partial class Spreadbook : UserControl
 
         spreadsheets.Add(spreadsheet);
 
-        spreadsheet.Initialized += OnSpreadsheetInitialized;
-
         var tabItem = new TabItem
         {
             Content = spreadsheet,
@@ -240,16 +253,17 @@ public partial class Spreadbook : UserControl
         };
 
         spreadsheet.Tag = tag;
-
-        // Force spreadsheets initialization.
-        tabItem.IsSelected = true;
     }
 
-    void OnSpreadsheetInitialized(object? o, EventArgs eventArgs)
+    void OnSpreadsheetLoaded(object? o, EventArgs eventArgs)
     {
         var spreadsheet = o as Spreadsheet;
         var tag = spreadsheet.Tag as SpreadsheetInfo;
         var worksheet = tag.EpplusWorksheet;
+        Debug.WriteLine($"OnSpreadsheetLoaded begins for {worksheet.Name}");
+
+        // This handler must be called once.
+        spreadsheet.Loaded -= OnSpreadsheetLoaded;
 
         var data = GetDataForSpreadsheet(worksheet);
         spreadsheet.SetData(data);
@@ -265,10 +279,10 @@ public partial class Spreadbook : UserControl
         spreadsheet.SetHeight(hiddenRows);
         spreadsheet.SetWidth(hiddenColumns);
 
-        if (spreadsheets.All(s => s.IsInitialized))
+        if (spreadsheets.All(s => s.IsLoaded))
         {
             (bookTabControl.Items.FirstOrDefault() as TabItem).IsSelected = true;
-            OnAllSpreadsheetsInitialized();
+            OnAllSpreadsheetsLoaded();
         }
     }
 
@@ -324,9 +338,10 @@ public partial class Spreadbook : UserControl
         return widthDictionary;
     }
 
-    protected virtual void OnAllSpreadsheetsInitialized()
+    protected virtual void OnAllSpreadsheetsLoaded()
     {
-        AllSpreadsheetsInitialized?.Invoke(this, EventArgs.Empty);
+        Debug.WriteLine("OnAllSpreadsheetsLoaded begins");
+        AllSpreadsheetsLoaded?.Invoke(this, EventArgs.Empty);
     }
 
     #endregion

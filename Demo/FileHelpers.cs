@@ -3,6 +3,7 @@ using Avalonia.Platform.Storage;
 
 using OfficeOpenXml;
 
+using System;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -45,6 +46,30 @@ namespace Demo
             return filePath;
         }
 
+        public static async Task<string?> ShowSaveFileDialog(Window window)
+        {
+            var topLevel = TopLevel.GetTopLevel(window);
+
+            var file =
+                await topLevel
+                .StorageProvider
+                .SaveFilePickerAsync(
+                    new FilePickerSaveOptions
+                    {
+                        DefaultExtension = "xlsx",
+                        SuggestedFileName = $"Spreadalonia_{DateTime.Now.Ticks}"
+                    });
+
+            if (file is null)
+            {
+                return null;
+            }
+
+            var filePath = file.Path.AbsolutePath;
+
+            return filePath;
+        }
+
         public static ExcelPackage? LoadExcelPackage(string? filePath)
         {
             if (filePath is null)
@@ -55,6 +80,21 @@ namespace Demo
             var fileContent = File.ReadAllBytes(filePath);
             var package = new ExcelPackage(new MemoryStream(fileContent));
             return package;
+        }
+
+        public static ExcelPackage SaveExcelPackage(ExcelPackage package, string? filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return package;
+            }
+
+            var fileContent = package.GetAsByteArray();
+            File.WriteAllBytes(filePath, fileContent);
+
+            // Reload excel package, because it is closed after GetAsByteArray().
+            var newPackage = new ExcelPackage(new MemoryStream(fileContent));
+            return newPackage;
         }
 
         public static ExcelPackage CreateEmptyExcelPackage()
