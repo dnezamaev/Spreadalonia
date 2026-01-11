@@ -128,3 +128,29 @@ public class MassiveSpreadCellsEditStartedEventArgs : EventArgs
         Range = range;
     }
 }
+
+public class RowCopiedEventArgs : EventArgs
+{
+    public int SourceRowIndex { get; set; }
+
+    public int DestinationRowIndex { get; set; }
+
+    public RowCopiedEventArgs(int sourceRowIndex, int destinationRowIndex)
+    {
+        SourceRowIndex = sourceRowIndex;
+        DestinationRowIndex = destinationRowIndex;
+    }
+}
+
+public class RowsAddedEventArgs : EventArgs
+{
+    public int FirstAddedRowIndex { get; set; }
+
+    public int AddedRowsCount { get; set; }
+
+    public RowsAddedEventArgs(int firstAddedRowIndex, int addedRowsCount)
+    {
+        FirstAddedRowIndex = firstAddedRowIndex;
+        AddedRowsCount = addedRowsCount;
+    }
+}

@@ -4,3 +4,4 @@
 - Autofit column width and row height based on Excel
 - Update README
 - Update Demo. Add options, new events and methods exapmles.
+- Make work undo/redo with EPPlus.

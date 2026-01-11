@@ -14,7 +14,7 @@
         <MenuItem x:Name="SaveFileMenuItem" Header="_Save..." Click="SaveFileMenuItem_Click"/>
       </MenuItem>
     </Menu>
-    <local:Spreadbook 
+    <local:SpreadbookEpplus
       x:Name="spreadbook"
       AllSpreadsheetsLoaded="Spreadbook_AllSpreadsheetsLoaded"/>
   </DockPanel>

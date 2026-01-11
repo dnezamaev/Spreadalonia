@@ -18,9 +18,9 @@ public partial class Spreadbook : UserControl
     /// <summary>
     /// Contains one spreadsheet per tab.
     /// </summary>
-    private readonly TabControl bookTabControl;
+    protected readonly TabControl bookTabControl;
 
-    private readonly List<Spreadsheet> spreadsheets;
+    protected readonly List<Spreadsheet> spreadsheets;
 
     /// <summary>
     /// All spreadsheets of this book.
@@ -47,16 +47,20 @@ public partial class Spreadbook : UserControl
     public Spreadsheet SelectedSpreadsheet => 
         bookTabControl.SelectedContent as Spreadsheet;
 
-    public ExcelWorkbook EpplusWorkbook { get; private set; }
-
     #endregion
 
-    #region Events.
+    #region Events & handlers.
 
     /// <summary>
     /// Raises when all worksheets are initialized.
     /// </summary>
     public event EventHandler AllSpreadsheetsLoaded;
+
+    protected virtual void OnAllSpreadsheetsLoaded()
+    {
+        Debug.WriteLine("OnAllSpreadsheetsLoaded begins");
+        AllSpreadsheetsLoaded?.Invoke(this, EventArgs.Empty);
+    }
 
     public event EventHandler<MassiveSpreadCellsEditStartedEventArgs> MassiveCellsEditStarted;
 
@@ -77,35 +81,13 @@ public partial class Spreadbook : UserControl
 
     public event EventHandler<SpreadCellEditEndedEventArgs> CellEditEnded;
 
-    internal SpreadCellEditEndedEventArgs RaiseCellEditEnded(SpreadCellEditEndedEventArgs eventArgs)
+    internal virtual SpreadCellEditEndedEventArgs RaiseCellEditEnded(Spreadsheet spreadsheet, SpreadCellEditEndedEventArgs eventArgs)
     {
         CellEditEnded?.Invoke(this, eventArgs);
 
         if (eventArgs.Cancel) return eventArgs;
 
-        UpdateEpplusCellValue(eventArgs.Cell, eventArgs.NewText);
-        EpplusWorkbook.Calculate();
-        ReloadDataFromEpplus();
-
         return eventArgs;
-    }
-
-    private void UpdateEpplusCellValue(SpreadCell cell, string newText)
-    {
-        var worksheetName = cell.Worksheet.WorksheetName;
-        var epplusWorksheet = FindSpreadsheetInfo(worksheetName).EpplusWorksheet;
-
-        epplusWorksheet.Cells[cell.Row + 1, cell.Column + 1].Value = newText;
-    }
-
-    private void ReloadDataFromEpplus()
-    {
-        foreach (var epplusWorksheet in EpplusWorkbook.Worksheets)
-        {
-            var data = GetDataForSpreadsheet(epplusWorksheet);
-            var spreadsheet = FindSpreadsheet(epplusWorksheet.Name);
-            spreadsheet.SetData(data);
-        }
     }
 
     public event EventHandler<SpreadCell> CellDoubleClicked;
@@ -136,7 +118,7 @@ public partial class Spreadbook : UserControl
 
     #endregion
 
-    #region Getting spreadsheets and their info.
+    #region Spreadsheets handling.
 
     public Spreadsheet FindSpreadsheet(string sheetName)
     {
@@ -148,208 +130,42 @@ public partial class Spreadbook : UserControl
         return spreadsheets.FirstOrDefault(s => s.WorksheetIndex == sheetIndex);
     }
 
-    public SpreadsheetInfo FindSpreadsheetInfo(string sheetName)
+    protected TabItem FindTabItem(Spreadsheet spreadsheet)
     {
-        return spreadsheets.FirstOrDefault(s => s.WorksheetName == sheetName)?.Tag as SpreadsheetInfo;
+        var tab =
+            bookTabControl
+                .Items
+                .FirstOrDefault(t => (t as TabItem)?.Content as Spreadsheet == spreadsheet)
+                as TabItem;
+
+        return tab;
     }
 
-    public SpreadsheetInfo FindSpreadsheetInfo(int sheetIndex)
+    public void SelectSpreadsheet(string sheetName)
     {
-        return spreadsheets.FirstOrDefault(s => s.WorksheetIndex == sheetIndex)?.Tag as SpreadsheetInfo;
+        var spreadsheet = 
+            FindSpreadsheet(sheetName) ?? 
+            throw new ArgumentException($"Worksheet '{sheetName}' not found.");
+
+        var tab = 
+            FindTabItem(spreadsheet) ?? 
+            throw new ArgumentException($"Worksheet '{sheetName}' not found.");
+
+        tab.IsSelected = true;
     }
 
-    #endregion
-
-    #region Loading Excel document.
-
-    /// <summary>
-    /// Load excel document.
-    /// </summary>
-    public void LoadEpplusDocument(ExcelWorkbook workbook)
+    public void SelectSpreadsheet(int sheetIndex)
     {
-        this.EpplusWorkbook = 
-            workbook ?? throw new ArgumentNullException(nameof(workbook));
+        var spreadsheet = 
+            FindSpreadsheet(sheetIndex) ?? 
+            throw new ArgumentException($"Worksheet #{sheetIndex} not found.");
 
-        spreadsheets.Clear();
-        bookTabControl.Items.Clear();
+        var tab = 
+            FindTabItem(spreadsheet) ?? 
+            throw new ArgumentException($"Worksheet #{sheetIndex} not found.");
 
-        var epplusWorksheets = GetEpplusWorksheets(workbook);
-
-        EpplusWorkbook.Calculate();
-        FillTabControl(epplusWorksheets);
-    }
-
-    private static IEnumerable<ExcelWorksheet> GetEpplusWorksheets(ExcelWorkbook workbook)
-    {
-        return workbook.Worksheets
-            .Where(s => s.Hidden == eWorkSheetHidden.Visible);
-    }
-
-    private void FillTabControl(IEnumerable<ExcelWorksheet> epplusWorksheets)
-    {
-        foreach (var worksheet in epplusWorksheets)
-        {
-            AddTabItem(worksheet);
-        }
-
-        // Delay setting data, because Spreadsheet.Data is null until Spreadsheet is initialised.
-        foreach (var spreadsheet in spreadsheets)
-        {
-            spreadsheet.Loaded += OnSpreadsheetLoaded;
-        }
-
-        // Force spreadsheets initialization.
-        foreach (var spreadsheet in spreadsheets)
-        {
-            var info = spreadsheet.Tag as SpreadsheetInfo;
-            var tabItem = info.TabItem;
-            tabItem.IsSelected = true;
-        }
-    }
-
-    private static IEnumerable<KeyValuePair<(int, int), string>> GetDataForSpreadsheet(ExcelWorksheet worksheet)
-    {
-        var dataForSpreadsheet = worksheet.Cells
-            .Where(c => c.Value != null && !c.EntireRow.Hidden && !c.EntireColumn.Hidden)
-            .Select(EpplusCellToSpreadsheetCell);
-
-        return dataForSpreadsheet;
-    }
-
-    private static KeyValuePair<(int, int), string> EpplusCellToSpreadsheetCell(ExcelRangeBase c)
-    {
-        var spreadsheetCells = new KeyValuePair<(int, int), string>(
-            key: new ValueTuple<int, int>(c.EntireColumn.StartColumn - 1, c.EntireRow.StartRow - 1),
-            value: c.Value.ToString());
-
-        return spreadsheetCells;
-    }
-
-    private void AddTabItem(ExcelWorksheet worksheet)
-    {
-        var spreadsheet = new Spreadsheet
-        {
-            Container = this,
-            WorksheetIndex = worksheet.Index,
-            WorksheetName = worksheet.Name,
-            Options = WorksheetOptions
-        };
-
-        spreadsheets.Add(spreadsheet);
-
-        var tabItem = new TabItem
-        {
-            Content = spreadsheet,
-            Header = worksheet.Name
-        };
-
-        bookTabControl.Items.Add(tabItem);
-
-        var tag = new SpreadsheetInfo
-        {
-            TabItem = tabItem,
-            Spreadsheet = spreadsheet,
-            EpplusWorksheet = worksheet
-        };
-
-        spreadsheet.Tag = tag;
-    }
-
-    void OnSpreadsheetLoaded(object? o, EventArgs eventArgs)
-    {
-        var spreadsheet = o as Spreadsheet;
-        var tag = spreadsheet.Tag as SpreadsheetInfo;
-        var worksheet = tag.EpplusWorksheet;
-        Debug.WriteLine($"OnSpreadsheetLoaded begins for {worksheet.Name}");
-
-        // This handler must be called once.
-        spreadsheet.Loaded -= OnSpreadsheetLoaded;
-
-        var data = GetDataForSpreadsheet(worksheet);
-        spreadsheet.SetData(data);
-
-        var columnWidth = GetColumnsWidth(worksheet);
-        spreadsheet.SetWidth(columnWidth);
-
-        spreadsheet.AutoFitHeightAllRows();
-
-        var hiddenRows = GetHiddenRows(worksheet);
-        var hiddenColumns = GetHiddenColumns(worksheet);
-
-        spreadsheet.SetHeight(hiddenRows);
-        spreadsheet.SetWidth(hiddenColumns);
-
-        if (spreadsheets.All(s => s.IsLoaded))
-        {
-            (bookTabControl.Items.FirstOrDefault() as TabItem).IsSelected = true;
-            OnAllSpreadsheetsLoaded();
-        }
-    }
-
-    private static Dictionary<int, double> GetHiddenRows(ExcelWorksheet worksheet)
-    {
-        var hiddenRows = new Dictionary<int, double>();
-
-        for (int i = 1; i < worksheet.Dimension?.End?.Row; i++)
-        {
-            var row = worksheet.Rows[i];
-
-            if (!row.Hidden)
-            {
-                continue;
-            }
-
-            hiddenRows[i - 1] = 0;
-        }
-
-        return hiddenRows;
-    }
-
-    private static Dictionary<int, double> GetHiddenColumns(ExcelWorksheet worksheet)
-    {
-        var hiddenColumns = new Dictionary<int, double>();
-
-        for (int i = 1; i < worksheet.Dimension?.End?.Column; i++)
-        {
-            var column = worksheet.Columns[i];
-
-            if (!column.Hidden)
-            {
-                continue;
-            }
-
-            hiddenColumns[i - 1] = 0;
-        }
-
-        return hiddenColumns;
-    }
-
-    private static Dictionary<int, double> GetColumnsWidth(ExcelWorksheet worksheet)
-    {
-        var widthDictionary = new Dictionary<int, double>();
-
-        for (int i = 1; i < worksheet.Dimension?.End?.Column; i++)
-        {
-            var column = worksheet.Columns[i];
-
-            widthDictionary[i - 1] = column.Width * 7.5;
-        }
-
-        return widthDictionary;
-    }
-
-    protected virtual void OnAllSpreadsheetsLoaded()
-    {
-        Debug.WriteLine("OnAllSpreadsheetsLoaded begins");
-        AllSpreadsheetsLoaded?.Invoke(this, EventArgs.Empty);
+        tab.IsSelected = true;
     }
 
     #endregion
-}
-
-public class SpreadsheetInfo
-{
-    public TabItem TabItem { get; set; }
-    public Spreadsheet Spreadsheet { get; set; }
-    public ExcelWorksheet EpplusWorksheet { get; set; }
 }

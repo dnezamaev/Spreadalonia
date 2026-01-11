@@ -27,6 +27,7 @@ using Fare;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -44,6 +45,24 @@ namespace Spreadalonia
 
         #region Events.
 
+        public event EventHandler<RowsAddedEventArgs> RowsAdded;
+
+        internal void RaiseRowsAdded(RowsAddedEventArgs eventArgs)
+        {
+            if (SkipEvents) return;
+
+            RowsAdded?.Invoke(this, eventArgs);
+        }
+
+        public event EventHandler<RowCopiedEventArgs> RowCopied;
+
+        internal void RaiseRowCopied(RowCopiedEventArgs eventArgs)
+        {
+            if (SkipEvents) return;
+
+            RowCopied?.Invoke(this, eventArgs);
+        }
+
         public event EventHandler<MassiveSpreadCellsEditStartedEventArgs> MassiveCellsEditStarted;
 
         internal MassiveSpreadCellsEditStartedEventArgs RaiseMassiveCellsEditStarted(
@@ -57,8 +76,10 @@ namespace Spreadalonia
                     newCellsContent.ToList(),
                     range);
 
+            if (SkipEvents) return eventArgs;
+
             MassiveCellsEditStarted?.Invoke(this, eventArgs);
-            Container?.RaiseMassiveCellsEditStarted(eventArgs);
+            SpreadBook?.RaiseMassiveCellsEditStarted(eventArgs);
             return eventArgs;
         }
 
@@ -67,8 +88,11 @@ namespace Spreadalonia
         internal SpreadCellEditStartedEventArgs RaiseCellEditStarted()
         {
             var eventArgs = new SpreadCellEditStartedEventArgs(new SpreadCell(this, EditingCell));
+
+            if (SkipEvents) return eventArgs;
+
             CellEditStarted?.Invoke(this, eventArgs);
-            Container?.RaiseCellEditStarted(eventArgs);
+            SpreadBook?.RaiseCellEditStarted(eventArgs);
             return eventArgs;
         }
 
@@ -77,8 +101,11 @@ namespace Spreadalonia
         internal SpreadCellEditEndedEventArgs RaiseCellEditEnded(string newText)
         {
             var eventArgs = new SpreadCellEditEndedEventArgs(new SpreadCell(this, EditingCell), newText);
+
+            if (SkipEvents) return eventArgs;
+
             CellEditEnded?.Invoke(this, eventArgs);
-            Container?.RaiseCellEditEnded(eventArgs);
+            SpreadBook?.RaiseCellEditEnded(this, eventArgs);
             return eventArgs;
         }
 
@@ -86,16 +113,20 @@ namespace Spreadalonia
 
         internal void RaiseCellDoubleClicked(SpreadCell cell)
         {
+            if (SkipEvents) return;
+
             CellDoubleClicked?.Invoke(this, cell);
-            Container?.RaiseCellDoubleClicked(cell);
+            SpreadBook?.RaiseCellDoubleClicked(cell);
         }
 
         public event EventHandler<SpreadCell> CellClicked;
 
         internal void RaiseCellClicked(SpreadCell cell)
         {
+            if (SkipEvents) return;
+
             CellClicked?.Invoke(this, cell);
-            Container?.RaiseCellClicked(cell);
+            SpreadBook?.RaiseCellClicked(cell);
         }
 
         /// <summary>
@@ -105,6 +136,8 @@ namespace Spreadalonia
 
         internal void RaiseCellSizeChanged()
         {
+            if (SkipEvents) return;
+
             if (this.Selection.Count > 0)
             {
                 int x = this.Selection[0].Left;
@@ -122,6 +155,8 @@ namespace Spreadalonia
 
         internal bool RaiseColorDoubleTapped((int, int) cell, Color color)
         {
+            if (SkipEvents) return false;
+
             ColorDoubleTappedEventArgs e = new ColorDoubleTappedEventArgs(cell.Item1, cell.Item2, color);
             ColorDoubleTapped?.Invoke(this, e);
             return e.Handled;
@@ -131,11 +166,39 @@ namespace Spreadalonia
 
         #region Properties.
 
-        public static readonly StyledProperty<Spreadbook> ContainerProperty = AvaloniaProperty.Register<Spreadsheet, Spreadbook>(nameof(Container));
-        public Spreadbook Container
+        #region Inner properties for processes tuning.
+
+        /// <summary>
+        /// Events are not raised if true.
+        /// </summary>
+        internal bool SkipEvents { get; set; } = false;
+
+        /// <summary>
+        /// On* virtual protected methods are not called if true.
+        /// </summary>
+        internal bool SkipHandlers { get; set; } = false;
+
+        /// <summary>
+        /// Invalidation is not made if true.
+        /// </summary>
+        internal bool SkipInvalidation { get; set; } = false;
+
+        /// <summary>
+        /// Set all Skip* values.
+        /// </summary>
+        internal void SetSkipValues(bool skipValue)
         {
-            get { return GetValue(ContainerProperty); }
-            set { SetValue(ContainerProperty, value); }
+            SkipEvents = SkipHandlers = SkipInvalidation = skipValue;
+        }
+
+        #endregion
+
+        public static readonly StyledProperty<Spreadbook> SpreadBookProperty = AvaloniaProperty.Register<Spreadsheet, Spreadbook>(nameof(SpreadBook));
+
+        public Spreadbook SpreadBook
+        {
+            get { return GetValue(SpreadBookProperty); }
+            set { SetValue(SpreadBookProperty, value); }
         }
 
         /// <summary>
@@ -146,7 +209,7 @@ namespace Spreadalonia
         /// <summary>
         /// Zero-based index of this worksheet in Spreadbook.
         /// </summary>
-        public int WorksheetIndex
+        public virtual int WorksheetIndex
         {
             get => GetValue(WorksheetIndexProperty);
             set => SetValue(WorksheetIndexProperty, value);
@@ -160,7 +223,7 @@ namespace Spreadalonia
         /// <summary>
         /// Zero-based index of this worksheet in Spreadbook.
         /// </summary>
-        public string WorksheetName
+        public virtual string WorksheetName
         {
             get => GetValue(WorksheetNameProperty);
             set => SetValue(WorksheetNameProperty, value);
@@ -716,7 +779,7 @@ namespace Spreadalonia
 
                     if ((present && prevVal != newText) || (!present && !string.IsNullOrEmpty(newText)))
                     {
-                        var cell = new SpreadCell(this, EditingCell.Item1, EditingCell.Item2);
+                        var cell = new SpreadCell(this, EditingCell.Item1, EditingCell.Item2, newText);
 
                         if (RaiseCellEditEnded(newText).Cancel == false)
                         {
@@ -733,11 +796,16 @@ namespace Spreadalonia
 
                             this.PushNonDataStackNull();
                             this.ClearRedoStack();
+
+                            if (!SkipHandlers) 
+                                OnCellEditEnded(cell);
                         }
                     }
 
                     IsEditing = false;
-                    ContentTable.InvalidateVisual();
+
+                    if (!SkipInvalidation)
+                        ContentTable.InvalidateVisual();
                 }
             };
 
@@ -893,6 +961,8 @@ namespace Spreadalonia
                 ResetHeight();
             };
         }
+
+        protected virtual void OnCellEditEnded(SpreadCell cell) { }
 
         /// <inheritdoc/>
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -1377,6 +1447,15 @@ namespace Spreadalonia
 
         public int BottomSelectedRow => Selection.Max(range => range.Bottom);
 
+        public List<SpreadCell> GetSelectedCells(SelectionRange range)
+        {
+            var cells = Data
+                .Select(kvp => new SpreadCell(this, kvp.Key, kvp.Value))
+                .ToList();
+
+            return cells;
+        }
+
         public List<SpreadCell> GetSelectedCells()
         {
             var data = Helper.Array2dToFlatten(GetSelectedData(out var coordinates2d)).ToList();
@@ -1584,6 +1663,51 @@ namespace Spreadalonia
             }
         }
 
+        internal void InnerClearAllContents()
+        {
+            var range = new SelectionRange(0, 0, int.MaxValue, int.MaxValue);
+            InnerClearContents(range);
+        }
+
+        internal void InnerClearContents(SelectionRange range)
+        {
+            ContentTable.Data = ContentTable.Data.Remove(range, this.UndoStack);
+            PushNonDataStackNull();
+            this.ClearRedoStack();
+        }
+
+        /// <summary>
+        /// Clear the contents of the specified cells.
+        /// </summary>
+        public void ClearAllContents()
+        {
+            var range = new SelectionRange(0, 0, int.MaxValue, int.MaxValue);
+            ClearContents(range);
+        }
+
+        /// <summary>
+        /// Clear the contents of the specified cells.
+        /// </summary>
+        public void ClearContents(SelectionRange range)
+        {
+            var oldCellsContent = GetSelectedCells(range);
+
+            var newCellsContent =
+                oldCellsContent
+                    .Select(c => new SpreadCell(c.Worksheet, c.Column, c.Row, textValue: null))
+                    .ToList();
+
+            if (RaiseMassiveCellsEditStarted(oldCellsContent, newCellsContent, new List<SelectionRange> { range }).Cancel) return;
+
+            InnerClearContents(range);
+
+            if (!SkipHandlers)
+                OnClearContentsEnded(oldCellsContent);
+
+            if (!SkipInvalidation)
+                ContentTable.InvalidateVisual();
+        }
+
         /// <summary>
         /// Clear the contents of the selected cells.
         /// </summary>
@@ -1604,8 +1728,16 @@ namespace Spreadalonia
                 PushNonDataStackNull();
                 this.ClearRedoStack();
 
-                ContentTable.InvalidateVisual();
+                if (!SkipHandlers)
+                    OnClearContentsEnded(oldCellsContent);
+
+                if (!SkipInvalidation)
+                    ContentTable.InvalidateVisual();
             }
+        }
+
+        protected virtual void OnClearContentsEnded(List<SpreadCell> range)
+        {
         }
 
         /// <summary>
@@ -2029,7 +2161,19 @@ namespace Spreadalonia
             InsertRows(rowAfterSelected);
         }
 
-        public void InsertRows(SelectionRange rowAfterSelected)
+        /// <summary>
+        /// Inserts rows just after specified row index.
+        /// </summary>
+        public void InsertRows(int insertBeforeThisRowIndex, int numberOfRowsToAdd = 1)
+        {
+            var selection = new SelectionRange(
+                0, insertBeforeThisRowIndex - numberOfRowsToAdd + 1,
+                0, insertBeforeThisRowIndex);
+
+            InsertRows(selection);
+        }
+
+        public virtual void InsertRows(SelectionRange rowAfterSelected)
         {
             Table table = ContentTable;
 
@@ -2054,6 +2198,8 @@ namespace Spreadalonia
             table.InvalidateVisual();
             HorizontalHeaderControl.InvalidateVisual();
             VerticalHeaderControl.InvalidateVisual();
+
+            RaiseRowsAdded(new RowsAddedEventArgs(rowAfterSelected.Top, rowAfterSelected.Height));
         }
 
         /// <summary>
@@ -2081,7 +2227,7 @@ namespace Spreadalonia
             }
         }
 
-        public void DeleteRows(SelectionRange selection)
+        public virtual void DeleteRows(SelectionRange selection)
         {
             Table table = ContentTable;
             table.Data = table.Data.DeleteRows(selection, this.UndoStack);
@@ -2112,7 +2258,7 @@ namespace Spreadalonia
         /// </summary>
         /// <param name="sourceRow">Copy data from this row.</param>
         /// <param name="destinationRow">Paste data to this row.</param>
-        public void CopyRowContent(int sourceRow, int destinationRow)
+        public virtual void CopyRow(int sourceRow, int destinationRow)
         {
             var newData =
                 Data
@@ -2121,6 +2267,8 @@ namespace Spreadalonia
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
             
             SetData(newData);
+
+            RaiseRowCopied(new RowCopiedEventArgs(sourceRow, destinationRow));
         }
 
         /// <summary>
@@ -3078,11 +3226,11 @@ namespace Spreadalonia
         /// <summary>
         /// Set the value of the specified cell.
         /// </summary>
-        public void SetData(int column, int row, string data)
+        public void SetCellText(int column, int row, string text)
         {
             var dataDictionary = new Dictionary<(int, int), string>
             {
-                { (column, row), data }
+                { (column, row), text }
             };
 
             SetData(dataDictionary);
@@ -3125,8 +3273,18 @@ namespace Spreadalonia
                 this.ClearRedoStack();
             }
 
-            ContentTable.InvalidateVisual();
+            var cells = data
+                .Select(item => new SpreadCell(this, item.Key, item.Value))
+                .ToList();
+
+            if (!SkipHandlers)
+                OnSetDataEnded(cells);
+
+            if (!SkipInvalidation)
+                ContentTable.InvalidateVisual();
         }
+
+        protected virtual void OnSetDataEnded(List<SpreadCell> newData) { }
 
 
         /// <summary>
