@@ -1,0 +1,37 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:demo="clr-namespace:Demo"
+    mc:Ignorable="d"
+		d:DesignWidth="800"
+		d:DesignHeight="450"
+		x:Class="Demo.DatePickerWindow"
+    x:DataType="demo:DatePickerWindowViewModel"
+    Title="Select date"
+		CanResize="True"
+		WindowStartupLocation="CenterScreen"
+		SizeToContent="WidthAndHeight"
+		FontSize="14"
+    >
+
+		<StackPanel>
+		    <DatePicker 
+          Name="DatePickerInput" 
+					HorizontalAlignment="Center"
+					Margin="10"
+          SelectedDate="{Binding SelectedDate}"
+          />
+
+				<Button
+					Content="OK"
+					HorizontalAlignment="Center"
+					Margin="10"
+					IsEnabled="{Binding IsValid, Mode=OneWay}"
+					Command="{Binding OkButtonPressedCommand}"
+          />
+
+		</StackPanel>
+
+</Window>
