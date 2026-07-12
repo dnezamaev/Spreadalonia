@@ -11,6 +11,8 @@ The library is released under the [LGPLv3](https://www.gnu.org/licenses/lgpl-3.0
     <img src="screenshot.png">
 </p>
 
+https://github.com/user-attachments/assets/ee251316-fcdb-4e5a-b441-327e0edd6b72
+
 ## Getting started
 
 The library targets .NET Standard 2.0, thus it can be used in projects that target .NET Standard 2.0+ and .NET Core 2.0+. The latest version supports Avalonia 11, versions up to 1.0.4 support Avalonia 0.10.
