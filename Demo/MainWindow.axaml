@@ -14,11 +14,12 @@
         <MenuItem x:Name="OpenFileMenuItem" Header="_Open..." Click="OpenFileMenuItem_Click"/>
         <MenuItem x:Name="SaveFileMenuItem" Header="_Save..." Click="SaveFileMenuItem_Click"/>
       </MenuItem>
-      <MenuItem Header="_Edit">
+<!-- Moved the Edit menu items out of the Edit menu for easier access. -->
+<!--      <MenuItem Header="_Edit"> -->
         <MenuItem x:Name="InsertRowMenuItem" Header="Add row _above selection" Click="InsertRowMenuItem_OnClick"/>
         <MenuItem x:Name="AppendRowMenuItem" Header="Add row _below selection" Click="AppendRowMenuItem_OnClick"/>
         <MenuItem x:Name="CopyRowMenuItem" Header="_Copy top selected row to bottom one" Click="CopyRowMenuItem_OnClick"/>
-      </MenuItem>
+<!--      </MenuItem> -->
     </Menu>
     <local:SpreadbookEpplus 
       x:Name="spreadbook"
