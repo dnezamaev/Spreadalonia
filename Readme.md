@@ -7,10 +7,6 @@
 
 The library is released under the [LGPLv3](https://www.gnu.org/licenses/lgpl-3.0.html) licence.
 
-<p align="center">
-    <img src="screenshot.png">
-</p>
-
 https://github.com/user-attachments/assets/ee251316-fcdb-4e5a-b441-327e0edd6b72
 
 ## Getting started
